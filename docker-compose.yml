@@ -1,0 +1,118 @@
+version: '3'
+
+networks:
+  symfony:
+
+
+services:
+  app:
+    build:
+      context: ./dockerfiles
+      dockerfile: nginx.dockerfile
+      args:
+        - UID=${UID:-1000}
+        - GID=${GID:-1000}
+    ports:
+      - "80:80"
+    volumes:
+      - ./src/symfony:/var/www/html:delegated
+      - ./src/vue:/app
+    depends_on:
+      - php
+      - vue
+      - redis
+      - mysql
+      - mailhog
+    networks:
+      - symfony
+
+  mysql:
+    image: mariadb:10.6
+    restart: unless-stopped
+    tty: true
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: homestead
+      MYSQL_USER: homestead
+      MYSQL_PASSWORD: secret
+      MYSQL_ROOT_PASSWORD: secret
+      SERVICE_TAGS: dev
+      SERVICE_NAME: mysql
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    networks:
+      - symfony
+
+  php:
+    build:
+      context: ./dockerfiles
+      dockerfile: php.dockerfile
+      args:
+        - UID=${UID:-1000}
+        - GID=${GID:-1000}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src/symfony:/var/www/html:delegated
+      - ./src/vue:/app
+    networks:
+      - symfony
+
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - symfony
+
+  composer:
+    build:
+      context: ./dockerfiles
+      dockerfile: php.dockerfile
+      args:
+        - UID=${UID:-1000}
+        - GID=${GID:-1000}
+    volumes:
+      - ./src/symfony:/var/www/html
+    depends_on:
+      - php
+    entrypoint: [ 'composer', '--ignore-platform-reqs' ]
+    networks:
+      - symfony
+
+  vue:
+    image: node:current-alpine
+    volumes:
+      - ./src/vue:/app
+    ports:
+      - "8080:8080"
+    working_dir: /app
+    entrypoint: [ 'npm', 'run', 'serve' ]
+    networks:
+      - symfony
+
+  artisan:
+    build:
+      context: ./dockerfiles
+      dockerfile: php.dockerfile
+      args:
+        - UID=${UID:-1000}
+        - GID=${GID:-1000}
+    volumes:
+      - ./src/symfony:/var/www/html:delegated
+    depends_on:
+      - mysql
+      - vue
+    entrypoint: [ 'php', '/var/www/html/artisan' ]
+    networks:
+      - symfony
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - symfony
